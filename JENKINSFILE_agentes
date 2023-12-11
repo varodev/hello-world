@@ -1,0 +1,57 @@
+pipeline {
+    agent any
+
+     stages {
+        stage('Get Code') {
+            steps {
+                // Obtener código del repo
+                git branch: 'feature_fix_racecond', url: 'https://github.com/varodev/hello-world'
+            }
+        }
+    
+        stage('Build') {
+           steps {
+              echo 'Eyyy, esto es Python. No hay que compilar nada!!!'
+	          echo WORKSPACE
+              bat 'dir'
+           }
+        }
+        
+        stage('Unit') {
+            steps {
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    bat '''
+                        set PYTHONPATH=%WORKSPACE%
+                        C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-unit.xml test\\unit
+                    '''
+                    stash includes: "*", name: "first stash"
+               }
+            }
+        }   
+
+
+        stage('Rest') {
+            steps {
+                bat '''
+                    set FLASK_APP=app\\api.py
+                    set FLASK_ENV=development
+                    start C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\flask run
+                    start java -jar C:\\Users\\Er_xi\\Downloads\\wiremock-standalone-3.3.1.jar --port 9090 --root-dir C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\test3\\test\\wiremock
+                    set PYTHONPATH=%WORKSPACE%
+                    C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-rest.xml test\\rest
+                '''
+                stash includes: "*", name: "second stash"
+            }    
+        }
+
+        stage('Results') {
+            agent {label 'SLAVE-JUNIT'}
+            steps {
+                unstash "first stash"
+                unstash "second stash"
+                junit 'result*.xml' 
+            }
+        }
+     
+    }
+}
