@@ -5,7 +5,7 @@ pipeline {
         stage('Get Code') {
             steps {
                 // Obtener código del repo
-                git 'https://github.com/varodev/hello-world'
+                git branch: 'feature_fix_racecond', url:'https://github.com/varodev/hello-world'
             }
         }
     
