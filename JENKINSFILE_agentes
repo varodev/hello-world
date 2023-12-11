@@ -3,14 +3,17 @@ pipeline {
 
      stages {
         stage('Get Code') {
+            agent {label 'SLAVE-GET-CODE'}
             steps {
                 // Obtener código del repo
                 git branch: 'master', url: 'https://github.com/varodev/hello-world'
+                stash includes: "*", name: "code stash"
             }
         }
     
         stage('Build') {
            steps {
+              unstash "code stash"
               echo 'Eyyy, esto es Python. No hay que compilar nada!!!'
 	          echo WORKSPACE
               bat 'dir'
@@ -20,11 +23,12 @@ pipeline {
         stage('Unit') {
             steps {
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    unstash "code stash"
                     bat '''
                         set PYTHONPATH=%WORKSPACE%
                         C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-unit.xml test\\unit
                     '''
-                    stash includes: "*", name: "first stash"
+                    stash includes: "*", name: "result-unit stash"
                }
             }
         }   
@@ -32,6 +36,7 @@ pipeline {
 
         stage('Rest') {
             steps {
+                unstash "code stash"
                 bat '''
                     set FLASK_APP=app\\api.py
                     set FLASK_ENV=development
@@ -40,15 +45,15 @@ pipeline {
                     set PYTHONPATH=%WORKSPACE%
                     C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-rest.xml test\\rest
                 '''
-                stash includes: "*", name: "second stash"
+                stash includes: "*", name: "rest stash"
             }    
         }
 
         stage('Results') {
             agent {label 'SLAVE-JUNIT'}
             steps {
-                unstash "first stash"
-                unstash "second stash"
+                unstash "result-unit stash"
+                unstash "rest stash"
                 junit 'result*.xml' 
             }
         }
