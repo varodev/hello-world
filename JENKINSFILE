@@ -23,14 +23,6 @@ pipeline {
                     bat '''
                         set PYTHONPATH=%WORKSPACE%
                         C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-unit.xml test\\unit
-                        C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-unit.xml test\\unit
-                        C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-unit.xml test\\unit
-                        C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-unit.xml test\\unit
-                        C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-unit.xml test\\unit
-                        C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-unit.xml test\\unit
-                        C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-unit.xml test\\unit
-                        C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-unit.xml test\\unit
-                        C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-unit.xml test\\unit
                     '''
                }
             }
