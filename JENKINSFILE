@@ -9,23 +9,19 @@ pipeline {
             }
         }
     
-        stage('Build') {
-           steps {
-              echo 'Eyyy, esto es Python. No hay que compilar nada!!!'
-	          echo WORKSPACE
-              bat 'dir'
-           }
-        }
-        
+           
         stage('Unit') {
             steps {
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                     bat '''
                         set PYTHONPATH=%WORKSPACE%
-                        C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-unit.xml test\\unit
+                        pytest --junitxml=result-unit.xml test\\unit
                     '''
+                    junit 'result-unit.xml' 
                }
+               
             }
+
         } 
 
 
@@ -35,18 +31,13 @@ pipeline {
                     set FLASK_APP=app\\api.py
                     set FLASK_ENV=development
                     start flask run
-                    start java -jar C:\\Users\\Er_xi\\Downloads\\wiremock-standalone-3.3.1.jar --port 9090 --root-dir C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\test3\\test\\wiremock
+                    start java -jar C:\\binarios\\wiremock-standalone-3.3.1.jar --port 9090 --root-dir %WORKSPACE%\\test\\wiremock
                     set PYTHONPATH=%WORKSPACE%
-                    C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-rest.xml test\\rest
+                    pytest --junitxml=result-rest.xml test\\rest
                 '''
+                junit 'result-rest.xml' 
             }    
         }
-
-        stage('Results') {
-            steps {
-                junit 'result*.xml' 
-            }
-        }
-     
+        
     }
 }
