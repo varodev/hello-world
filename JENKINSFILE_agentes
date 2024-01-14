@@ -1,62 +1,132 @@
 pipeline {
     agent any
 
-     stages {
+    environment {
+        PYTHONPATH = "${WORKSPACE}"
+        FLASK_APP = "app/api.py"
+        FLASK_ENV = "development"
+    }
+
+    stages {
         stage('Get Code') {
-            agent {label 'SLAVE-GET-CODE'}
             steps {
                 // Obtener código del repo
-                git branch: 'master', url: 'https://github.com/varodev/hello-world'
-                stash includes: "*", name: "code stash"
+                git branch: 'master', url:'https://github.com/varodev/hello-world'
             }
         }
-    
-        stage('Build') {
-           steps {
-              unstash "code stash"
-              echo 'Eyyy, esto es Python. No hay que compilar nada!!!'
-	          echo WORKSPACE
-              bat 'dir'
-           }
-        }
-        
-        stage('Unit') {
-            steps {
-                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                    unstash "code stash"
-                    bat '''
-                        set PYTHONPATH=%WORKSPACE%
-                        C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-unit.xml test\\unit
-                    '''
-                    stash includes: "*", name: "result-unit stash"
-               }
+
+        stage('Run Tests') {
+            parallel{
+                stage('Unit') {
+                    agent {
+                        label "agents"
+                    }
+                    steps {
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                            sh '''
+                                sh -c "whoami; hostname; echo ${WORKSPACE}"
+                                echo "PYTHONPATH: ${PYTHONPATH}"
+                                pytest --junitxml=result-unit.xml test/unit
+                                ls -la .
+                                cat result-unit.xml
+                            '''
+                            stash name: "unit", includes: "result-unit.xml"
+                            junit testResults: 'result-unit.xml', skipPublishingChecks: true
+                        }
+                    }
+                }
+
+
+                stage('Rest') {
+                    agent {
+                        label "agents"
+                    }
+                    steps {
+                        sh '''
+                            sh -c "whoami; hostname; echo ${WORKSPACE}"
+                            flask run &
+                            FLASK_PID=$!
+                            if [ ! -f wiremock-standalone-3.3.1.jar ]; then
+                                wget https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.3.1/wiremock-standalone-3.3.1.jar
+                            fi
+                            java -jar wiremock-standalone-3.3.1.jar --port 9090 --root-dir ./test/wiremock &
+                            sleep 4
+                            pytest --junitxml=result-rest.xml test/rest
+                            kill -9 $FLASK_PID
+                        '''
+                        stash name: "rest", includes: "result-rest.xml"
+                        junit 'result-rest.xml'
+                    }
+                }
+
+                stage('Static') {
+                    steps {
+                        sh '''
+                            sh -c "whoami; hostname; echo ${WORKSPACE}"
+                            flake8 --format=pylint --output=result-flake8.txt --exit-zero
+                        '''
+                        stash name: "static", includes: "result-flake8.txt"
+                        recordIssues qualityGates: [[threshold: 8, type: 'TOTAL', unstable: false], [threshold: 10, type: 'TOTAL', unstable: true]], tools: [flake8(pattern: 'result-flake8.txt')], enabledForFailure: true
+                    }
+                }
+
+                stage('Security') {
+                    agent {
+                        label "agents"
+                    }
+                    steps {
+                        sh '''
+                            sh -c "whoami; hostname; echo ${WORKSPACE}"
+                            bandit -r . -o result-bandit.xml --exit-zero -f xml
+                        '''
+                        stash name: "security", includes: "result-bandit.xml"
+                        recordIssues ignoreQualityGate: true, qualityGates: [[threshold: 2, type: 'TOTAL', unstable: true], [threshold: 4, type: 'TOTAL', unstable: false]], tools: [junitParser(pattern: 'result-bandit.xml', id: 'bandit', name: 'Bandit Security')], enabledForFailure: true
+                    }
+                }
+
+                stage('Coverage') {
+                    agent {
+                        label "agents"
+                    }
+                    steps {
+                        sh '''
+                            sh -c "whoami; hostname; echo ${WORKSPACE}"
+                            coverage run --source=app --branch --omit=app/__init__.py,app/api.py -m pytest test/unit
+                            coverage xml
+                        '''
+                        stash name: "coverage", includes: "coverage.xml"
+                        cobertura coberturaReportFile: 'coverage.xml', onlyStable: false
+                    }
+                }
             }
-        }   
+        }
 
-
-        stage('Rest') {
+        stage('Performance') {
             steps {
-                unstash "code stash"
-                bat '''
-                    set FLASK_APP=app\\api.py
-                    set FLASK_ENV=development
-                    start C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\flask run
-                    start java -jar C:\\Users\\Er_xi\\Downloads\\wiremock-standalone-3.3.1.jar --port 9090 --root-dir C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\test3\\test\\wiremock
-                    set PYTHONPATH=%WORKSPACE%
-                    C:\\Users\\Er_xi\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pytest --junitxml=result-rest.xml test\\rest
+                sh '''
+                    sh -c "whoami; hostname; echo ${WORKSPACE}"
+                    if [ ! -f apache-jmeter-5.6.3.tgz ]; then
+                        wget https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-5.6.3.tgz
+                    fi
+                    tar -zxf apache-jmeter-5.6.3.tgz
+                    flask run &
+                    sleep 4
+                    rm -f result-perf.jtl
+                    apache-jmeter-5.6.3/bin/jmeter -n -t ./jmeter-test.jmx -l result-perf.jtl
+                    rm -rf apache-jmeter-5.6.3
                 '''
-                stash includes: "*", name: "rest stash"
-            }    
-        }
-
-        stage('Results') {
-            agent {label 'SLAVE-JUNIT'}
-            steps {
-                unstash "result-unit stash"
-                unstash "rest stash"
-                junit 'result*.xml' 
+                stash name: "performance", includes: "result-perf.jtl"
+                perfReport sourceDataFiles: 'result-perf.jtl'
             }
         }
-     
+    }
+    post {
+      always {
+        sh '''
+          sh -c "whoami; hostname; echo ${WORKSPACE}"
+          rm -f result-*
+          rm -f coverage.xml
+        '''
+      }
     }
 }
